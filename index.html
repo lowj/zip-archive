@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zip - Path Puzzle</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #f8f9fa;
+            --grid-bg: #ffffff;
+            --grid-border: #e0e0e0;
+            --cell-border: #d0d0d0;
+            --number-bg: #1a1a1a;
+            --number-text: #ffffff;
+            --path-start: #4a90d9;
+            --path-end: #7c5ce7;
+            --path-fill: rgba(74, 144, 217, 0.25);
+            --success: #00c853;
+        }
+
+        body {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .page-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+        }
+
+        header {
+            text-align: center;
+        }
+
+        h1 {
+            font-family: 'Space Mono', monospace;
+            font-size: 2.5rem;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, var(--path-start), var(--path-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 0.95rem;
+            margin-top: 4px;
+        }
+
+        .grid-wrapper {
+            background: var(--grid-bg);
+            border-radius: 16px;
+            padding: 12px;
+            box-shadow: 
+                0 4px 6px rgba(0, 0, 0, 0.04),
+                0 10px 40px rgba(0, 0, 0, 0.08);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 0;
+            border: 2px solid var(--grid-border);
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .cell {
+            width: 52px;
+            height: 52px;
+            border: 1px solid var(--cell-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+        }
+
+        .cell.filled {
+            background: var(--path-fill);
+        }
+
+        .cell.wall-top {
+            border-top: 3px solid #1a1a1a;
+        }
+
+        .cell.wall-bottom {
+            border-bottom: 3px solid #1a1a1a;
+        }
+
+        .cell.wall-left {
+            border-left: 3px solid #1a1a1a;
+        }
+
+        .cell.wall-right {
+            border-right: 3px solid #1a1a1a;
+        }
+
+        .cell.path {
+            background: linear-gradient(135deg, var(--path-start), var(--path-end));
+        }
+
+        .cell.current {
+            background: linear-gradient(135deg, var(--path-start), var(--path-end));
+            box-shadow: inset 0 0 0 3px rgba(255,255,255,0.4);
+        }
+
+        .number {
+            width: 36px;
+            height: 36px;
+            background: var(--number-bg);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--number-text);
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 700;
+            font-size: 14px;
+            z-index: 10;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .number.active {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .number.completed {
+            background: linear-gradient(135deg, var(--path-start), var(--path-end));
+        }
+
+        /* Path connectors */
+        .connector {
+            position: absolute;
+            background: linear-gradient(135deg, var(--path-start), var(--path-end));
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .connector.horizontal {
+            height: 20px;
+            width: calc(100% + 2px);
+            top: 50%;
+            left: -1px;
+            transform: translateY(-50%);
+        }
+
+        .connector.vertical {
+            width: 20px;
+            height: calc(100% + 2px);
+            left: 50%;
+            top: -1px;
+            transform: translateX(-50%);
+        }
+
+        .connector.right {
+            left: 50%;
+            width: calc(50% + 1px);
+        }
+
+        .connector.left {
+            right: 50%;
+            left: auto;
+            width: calc(50% + 1px);
+        }
+
+        .connector.down {
+            top: 50%;
+            height: calc(50% + 1px);
+        }
+
+        .connector.up {
+            bottom: 50%;
+            top: auto;
+            height: calc(50% + 1px);
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+            padding: 12px 20px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        .stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-value {
+            font-family: 'Space Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--number-bg);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+        }
+
+        button {
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 500;
+            font-size: 1rem;
+            padding: 14px 32px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-reset {
+            background: white;
+            color: #333;
+            border: 2px solid var(--grid-border);
+        }
+
+        .btn-reset:hover {
+            background: #f5f5f5;
+            border-color: #ccc;
+        }
+
+        .btn-new {
+            background: linear-gradient(135deg, var(--path-start), var(--path-end));
+            color: white;
+        }
+
+        .btn-new:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(74, 144, 217, 0.35);
+        }
+
+        .message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            background: white;
+            padding: 40px 60px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s ease;
+            z-index: 100;
+        }
+
+        .message.show {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+            pointer-events: auto;
+        }
+
+        .message h2 {
+            font-family: 'Space Mono', monospace;
+            font-size: 2rem;
+            color: var(--success);
+            margin-bottom: 8px;
+        }
+
+        .message p {
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.3);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 99;
+        }
+
+        .overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .instructions {
+            max-width: 400px;
+            text-align: center;
+            color: #888;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        /* Level Creator Styles */
+        .mode-toggle {
+            display: flex;
+            background: white;
+            border-radius: 12px;
+            padding: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            margin-bottom: 8px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 10px 20px;
+            border: none;
+            background: transparent;
+            border-radius: 8px;
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 500;
+            font-size: 0.95rem;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .mode-btn.active {
+            background: linear-gradient(135deg, var(--path-start), var(--path-end));
+            color: white;
+        }
+
+        .mode-btn:hover:not(.active) {
+            background: #f5f5f5;
+        }
+
+        .creator-controls {
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+            max-width: 440px;
+        }
+
+        .creator-controls.active {
+            display: flex;
+        }
+
+        .game-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .game-controls.hidden {
+            display: none;
+        }
+
+        .creator-instructions {
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        .creator-instructions h3 {
+            font-size: 0.9rem;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .creator-instructions ul {
+            list-style: none;
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .creator-instructions li {
+            padding: 4px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .creator-instructions li::before {
+            content: "•";
+            position: absolute;
+            left: 6px;
+            color: var(--path-start);
+        }
+
+        .output-area {
+            width: 100%;
+        }
+
+        .output-area label {
+            display: block;
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 6px;
+        }
+
+        .output-area textarea {
+            width: 100%;
+            height: 120px;
+            padding: 12px;
+            border: 2px solid var(--grid-border);
+            border-radius: 8px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+            resize: vertical;
+            background: #fafafa;
+        }
+
+        .output-area textarea:focus {
+            outline: none;
+            border-color: var(--path-start);
+        }
+
+        .creator-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .creator-buttons button {
+            flex: 1;
+        }
+
+        .btn-clear {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .btn-clear:hover {
+            background: #ee5a5a;
+        }
+
+        .btn-copy {
+            background: white;
+            color: #333;
+            border: 2px solid var(--grid-border);
+        }
+
+        .btn-copy:hover {
+            background: #f5f5f5;
+            border-color: #ccc;
+        }
+
+        .btn-load {
+            background: linear-gradient(135deg, var(--path-start), var(--path-end));
+            color: white;
+        }
+
+        .cell.edge-highlight-top {
+            box-shadow: inset 0 3px 0 0 rgba(26, 26, 26, 0.4);
+        }
+
+        .cell.edge-highlight-bottom {
+            box-shadow: inset 0 -3px 0 0 rgba(26, 26, 26, 0.4);
+        }
+
+        .cell.edge-highlight-left {
+            box-shadow: inset 3px 0 0 0 rgba(26, 26, 26, 0.4);
+        }
+
+        .cell.edge-highlight-right {
+            box-shadow: inset -3px 0 0 0 rgba(26, 26, 26, 0.4);
+        }
+
+        .creator-mode .cell {
+            cursor: crosshair;
+        }
+
+        .creator-mode .cell:hover {
+            background: rgba(74, 144, 217, 0.1);
+        }
+
+        /* Mode Toggle */
+        .mode-toggle {
+            display: flex;
+            background: white;
+            border-radius: 12px;
+            padding: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        .mode-btn {
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 500;
+            font-size: 0.9rem;
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: transparent;
+            color: #666;
+            transition: all 0.2s ease;
+        }
+
+        .mode-btn.active {
+            background: linear-gradient(135deg, var(--path-start), var(--path-end));
+            color: white;
+        }
+
+        .mode-btn:not(.active):hover {
+            background: #f5f5f5;
+        }
+
+        /* Creator specific styles */
+        .creator-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .creator-container.active {
+            display: flex;
+        }
+
+        .game-container:not(.active) {
+            display: none;
+        }
+
+        .creator-cell {
+            width: 52px;
+            height: 52px;
+            border: 1px solid var(--cell-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .creator-cell.wall-top {
+            border-top: 3px solid #1a1a1a;
+        }
+
+        .creator-cell.wall-bottom {
+            border-bottom: 3px solid #1a1a1a;
+        }
+
+        .creator-cell.wall-left {
+            border-left: 3px solid #1a1a1a;
+        }
+
+        .creator-cell.wall-right {
+            border-right: 3px solid #1a1a1a;
+        }
+
+        .creator-cell:hover {
+            background: rgba(74, 144, 217, 0.1);
+        }
+
+        .creator-cell .edge-zone {
+            position: absolute;
+            z-index: 5;
+        }
+
+        .creator-cell .edge-zone.top {
+            top: 0;
+            left: 8px;
+            right: 8px;
+            height: 8px;
+            cursor: n-resize;
+        }
+
+        .creator-cell .edge-zone.bottom {
+            bottom: 0;
+            left: 8px;
+            right: 8px;
+            height: 8px;
+            cursor: s-resize;
+        }
+
+        .creator-cell .edge-zone.left {
+            left: 0;
+            top: 8px;
+            bottom: 8px;
+            width: 8px;
+            cursor: w-resize;
+        }
+
+        .creator-cell .edge-zone.right {
+            right: 0;
+            top: 8px;
+            bottom: 8px;
+            width: 8px;
+            cursor: e-resize;
+        }
+
+        .creator-cell .edge-zone:hover {
+            background: rgba(26, 26, 26, 0.3);
+        }
+
+        .output-area {
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .output-area label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .output-area textarea {
+            width: 100%;
+            height: 150px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.8rem;
+            padding: 12px;
+            border: 2px solid var(--grid-border);
+            border-radius: 8px;
+            resize: vertical;
+        }
+
+        .output-area textarea:focus {
+            outline: none;
+            border-color: var(--path-start);
+        }
+
+        .creator-controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn-clear {
+            background: #ff6b6b;
+            color: white;
+        }
+
+        .btn-clear:hover {
+            background: #ee5a5a;
+        }
+
+        .btn-copy {
+            background: var(--number-bg);
+            color: white;
+        }
+
+        .btn-copy:hover {
+            background: #333;
+        }
+
+        .btn-test {
+            background: linear-gradient(135deg, var(--path-start), var(--path-end));
+            color: white;
+        }
+
+        .btn-test:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(74, 144, 217, 0.35);
+        }
+
+        .creator-instructions {
+            max-width: 400px;
+            text-align: center;
+            color: #888;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+
+        .creator-instructions strong {
+            color: #555;
+        }
+
+        @media (max-width: 500px) {
+            .cell {
+                width: 42px;
+                height: 42px;
+            }
+            
+            .number {
+                width: 30px;
+                height: 30px;
+                font-size: 12px;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .controls {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <header>
+            <h1>ZIP</h1>
+            <p class="subtitle">Connect the numbers, fill the grid</p>
+        </header>
+
+        <div class="mode-toggle">
+            <button class="mode-btn active" onclick="setMode('play')">Play</button>
+            <button class="mode-btn" onclick="setMode('create')">Create</button>
+        </div>
+
+        <div class="game-container active" id="game-mode">
+
+        <div class="grid-wrapper">
+            <div class="grid" id="grid"></div>
+        </div>
+
+        <div class="status-bar">
+            <div class="stat">
+                <span class="stat-value" id="progress">0/64</span>
+                <span class="stat-label">Cells Filled</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value" id="next-number">1</span>
+                <span class="stat-label">Next Number</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn-reset" onclick="resetPuzzle()">Reset</button>
+            <button class="btn-new" onclick="newPuzzle()">New Puzzle</button>
+        </div>
+
+        <p class="instructions">
+            Draw a path starting from 1, visiting each number in order. 
+            Fill every cell on the grid to complete the puzzle.
+        </p>
+        </div>
+
+        <div class="creator-container" id="create-mode">
+            <div class="grid-wrapper">
+                <div class="grid" id="creator-grid"></div>
+            </div>
+
+            <div class="creator-controls">
+                <button class="btn-clear" onclick="clearCreator()">Clear All</button>
+                <button class="btn-reset" onclick="undoLastNumber()">Undo Number</button>
+                <button class="btn-copy" onclick="copyOutput()">Copy JSON</button>
+                <button class="btn-test" onclick="testLevel()">Test Level</button>
+            </div>
+
+            <div class="output-area">
+                <label>Level JSON Output:</label>
+                <textarea id="level-output" readonly placeholder="Click cells to add numbers, click edges to add walls..."></textarea>
+            </div>
+
+            <p class="creator-instructions">
+                <strong>Click center</strong> of a cell to place the next number.<br>
+                <strong>Click edge</strong> of a cell to toggle a wall.<br>
+                <strong>Right-click number</strong> to remove it.
+            </p>
+        </div>
+    </div>
+    <div class="overlay" id="overlay"></div>
+    <div class="message" id="message">
+        <h2>🎉 Complete!</h2>
+        <p>You solved the puzzle!</p>
+        <button class="btn-new" onclick="newPuzzle(); hideMessage();">Play Again</button>
+    </div>
+
+    <script>
+        // Puzzle definitions - each puzzle has numbers and optional walls
+        // Walls are defined as {r, c, side} where side is 'top', 'bottom', 'left', or 'right'
+        const puzzles = [
+            // Puzzle from the screenshot
+            {
+                numbers: [
+                    {n: 1, r: 2, c: 6}, {n: 2, r: 2, c: 5}, {n: 3, r: 5, c: 3},
+                    {n: 4, r: 2, c: 4}, {n: 5, r: 2, c: 2}, {n: 6, r: 1, c: 2},
+                    {n: 7, r: 1, c: 4}, {n: 8, r: 1, c: 6}, {n: 9, r: 3, c: 6},
+                    {n: 10, r: 5, c: 7}, {n: 11, r: 6, c: 7}, {n: 12, r: 7, c: 7},
+                    {n: 13, r: 6, c: 6}, {n: 14, r: 5, c: 5}, {n: 15, r: 6, c: 5},
+                    {n: 16, r: 6, c: 3}, {n: 17, r: 7, c: 3}, {n: 18, r: 5, c: 1},
+                    {n: 19, r: 2, c: 0}, {n: 20, r: 1, c: 0}, {n: 21, r: 2, c: 1},
+                    {n: 22, r: 3, c: 2}, {n: 23, r: 6, c: 2}, {n: 24, r: 6, c: 1}
+                ],
+                walls: []
+            },
+            // Puzzle with walls
+            {
+                numbers: [
+                    {n: 1, r: 0, c: 0}, {n: 2, r: 0, c: 3}, {n: 3, r: 2, c: 3},
+                    {n: 4, r: 2, c: 0}, {n: 5, r: 4, c: 0}, {n: 6, r: 4, c: 3},
+                    {n: 7, r: 6, c: 3}, {n: 8, r: 6, c: 0}, {n: 9, r: 7, c: 4},
+                    {n: 10, r: 5, c: 5}, {n: 11, r: 3, c: 5}, {n: 12, r: 1, c: 5},
+                    {n: 13, r: 0, c: 7}, {n: 14, r: 3, c: 7}, {n: 15, r: 5, c: 7},
+                    {n: 16, r: 7, c: 7}
+                ],
+                walls: [
+                    {r: 1, c: 3, side: 'bottom'}, {r: 2, c: 3, side: 'top'},
+                    {r: 3, c: 1, side: 'right'}, {r: 3, c: 2, side: 'left'},
+                    {r: 5, c: 4, side: 'bottom'}, {r: 6, c: 4, side: 'top'}
+                ]
+            },
+            // Another puzzle with walls
+            {
+                numbers: [
+                    {n: 1, r: 0, c: 4}, {n: 2, r: 2, c: 4}, {n: 3, r: 2, c: 2},
+                    {n: 4, r: 0, c: 2}, {n: 5, r: 0, c: 0}, {n: 6, r: 2, c: 0},
+                    {n: 7, r: 4, c: 0}, {n: 8, r: 4, c: 2}, {n: 9, r: 6, c: 2},
+                    {n: 10, r: 6, c: 0}, {n: 11, r: 7, c: 3}, {n: 12, r: 5, c: 4},
+                    {n: 13, r: 3, c: 5}, {n: 14, r: 1, c: 6}, {n: 15, r: 3, c: 7},
+                    {n: 16, r: 5, c: 7}, {n: 17, r: 7, c: 6}, {n: 18, r: 7, c: 4}
+                ],
+                walls: [
+                    {r: 1, c: 1, side: 'bottom'}, {r: 2, c: 1, side: 'top'},
+                    {r: 3, c: 3, side: 'right'}, {r: 3, c: 4, side: 'left'},
+                    {r: 4, c: 5, side: 'bottom'}, {r: 5, c: 5, side: 'top'},
+                    {r: 6, c: 6, side: 'left'}, {r: 6, c: 5, side: 'right'}
+                ]
+            },
+            // Maze-like puzzle
+            {
+                numbers: [
+                    {n: 1, r: 3, c: 3}, {n: 2, r: 3, c: 4}, {n: 3, r: 1, c: 4},
+                    {n: 4, r: 1, c: 6}, {n: 5, r: 3, c: 6}, {n: 6, r: 5, c: 6},
+                    {n: 7, r: 5, c: 4}, {n: 8, r: 7, c: 4}, {n: 9, r: 7, c: 2},
+                    {n: 10, r: 5, c: 2}, {n: 11, r: 5, c: 0}, {n: 12, r: 3, c: 0},
+                    {n: 13, r: 1, c: 0}, {n: 14, r: 1, c: 2}, {n: 15, r: 0, c: 4},
+                    {n: 16, r: 0, c: 7}, {n: 17, r: 2, c: 7}, {n: 18, r: 4, c: 7},
+                    {n: 19, r: 6, c: 7}, {n: 20, r: 7, c: 7}
+                ],
+                walls: [
+                    {r: 2, c: 2, side: 'bottom'}, {r: 3, c: 2, side: 'top'},
+                    {r: 2, c: 5, side: 'bottom'}, {r: 3, c: 5, side: 'top'},
+                    {r: 4, c: 1, side: 'right'}, {r: 4, c: 2, side: 'left'},
+                    {r: 6, c: 3, side: 'right'}, {r: 6, c: 4, side: 'left'}
+                ]
+            }
+        ];
+
+        let currentPuzzle = 0;
+        let grid = [];
+        let path = [];
+        let numbers = {};
+        let maxNumber = 0;
+        let isDragging = false;
+        let totalCells = 64;
+
+        function initGrid() {
+            const gridEl = document.getElementById('grid');
+            gridEl.innerHTML = '';
+            grid = [];
+            
+            for (let r = 0; r < 8; r++) {
+                grid[r] = [];
+                for (let c = 0; c < 8; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    gridEl.appendChild(cell);
+                    grid[r][c] = {
+                        element: cell,
+                        number: null,
+                        inPath: false,
+                        connectors: [],
+                        walls: []
+                    };
+                }
+            }
+        }
+
+        function loadPuzzle(puzzleIndex) {
+            initGrid();
+            path = [];
+            numbers = {};
+            
+            const puzzle = puzzles[puzzleIndex];
+            maxNumber = Math.max(...puzzle.numbers.map(p => p.n));
+            
+            // Add numbers
+            puzzle.numbers.forEach(({n, r, c}) => {
+                const cell = grid[r][c];
+                const numberEl = document.createElement('div');
+                numberEl.className = 'number';
+                numberEl.textContent = n;
+                cell.element.appendChild(numberEl);
+                cell.number = n;
+                cell.numberEl = numberEl;
+                numbers[n] = {row: r, col: c};
+            });
+
+            // Add walls
+            if (puzzle.walls) {
+                puzzle.walls.forEach(({r, c, side}) => {
+                    const cell = grid[r][c];
+                    cell.element.classList.add(`wall-${side}`);
+                    if (!cell.walls) cell.walls = [];
+                    cell.walls.push(side);
+                });
+            }
+
+            updateStatus();
+            setupEventListeners();
+        }
+
+        function setupEventListeners() {
+            const gridEl = document.getElementById('grid');
+            
+            // Remove old listeners
+            gridEl.replaceWith(gridEl.cloneNode(true));
+            const newGridEl = document.getElementById('grid');
+            
+            // Rebuild grid references
+            const cells = newGridEl.querySelectorAll('.cell');
+            cells.forEach((cell, idx) => {
+                const r = Math.floor(idx / 8);
+                const c = idx % 8;
+                grid[r][c].element = cell;
+                
+                // Re-link existing number element if exists
+                const numberEl = cell.querySelector('.number');
+                if (numberEl) {
+                    grid[r][c].numberEl = numberEl;
+                }
+                
+                // Re-link wall data from class names
+                grid[r][c].walls = [];
+                if (cell.classList.contains('wall-top')) grid[r][c].walls.push('top');
+                if (cell.classList.contains('wall-bottom')) grid[r][c].walls.push('bottom');
+                if (cell.classList.contains('wall-left')) grid[r][c].walls.push('left');
+                if (cell.classList.contains('wall-right')) grid[r][c].walls.push('right');
+            });
+
+            // Mouse events
+            newGridEl.addEventListener('mousedown', handleStart);
+            newGridEl.addEventListener('mousemove', handleMove);
+            document.addEventListener('mouseup', handleEnd);
+
+            // Touch events
+            newGridEl.addEventListener('touchstart', handleStart, {passive: false});
+            newGridEl.addEventListener('touchmove', handleMove, {passive: false});
+            document.addEventListener('touchend', handleEnd);
+        }
+
+        function getCellFromEvent(e) {
+            let target;
+            if (e.touches) {
+                const touch = e.touches[0];
+                target = document.elementFromPoint(touch.clientX, touch.clientY);
+            } else {
+                target = e.target;
+            }
+            
+            while (target && !target.classList.contains('cell')) {
+                target = target.parentElement;
+            }
+            
+            if (!target || !target.dataset.row) return null;
+            
+            const r = parseInt(target.dataset.row);
+            const c = parseInt(target.dataset.col);
+            return {r, c, cell: grid[r][c]};
+        }
+
+        function handleStart(e) {
+            e.preventDefault();
+            const cellData = getCellFromEvent(e);
+            if (!cellData) return;
+
+            const {r, c, cell} = cellData;
+            
+            // Must start at number 1 or continue from current position
+            if (path.length === 0) {
+                if (cell.number === 1) {
+                    startPath(r, c);
+                }
+            } else {
+                // Check if clicking on current head to continue
+                const head = path[path.length - 1];
+                if (head.r === r && head.c === c) {
+                    isDragging = true;
+                }
+            }
+        }
+
+        function handleMove(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            
+            const cellData = getCellFromEvent(e);
+            if (!cellData) return;
+
+            const {r, c, cell} = cellData;
+            extendPath(r, c);
+        }
+
+        function handleEnd(e) {
+            isDragging = false;
+        }
+
+        function startPath(r, c) {
+            path = [{r, c}];
+            isDragging = true;
+            updateGridDisplay();
+        }
+
+        function isAdjacent(r1, c1, r2, c2) {
+            const dr = Math.abs(r1 - r2);
+            const dc = Math.abs(c1 - c2);
+            if (!((dr === 1 && dc === 0) || (dr === 0 && dc === 1))) {
+                return false;
+            }
+            
+            // Check for walls blocking the path
+            const fromCell = grid[r1][c1];
+            const toCell = grid[r2][c2];
+            
+            // Determine direction and check walls
+            if (r2 < r1) {
+                // Moving up
+                if (fromCell.walls.includes('top') || toCell.walls.includes('bottom')) {
+                    return false;
+                }
+            } else if (r2 > r1) {
+                // Moving down
+                if (fromCell.walls.includes('bottom') || toCell.walls.includes('top')) {
+                    return false;
+                }
+            } else if (c2 < c1) {
+                // Moving left
+                if (fromCell.walls.includes('left') || toCell.walls.includes('right')) {
+                    return false;
+                }
+            } else if (c2 > c1) {
+                // Moving right
+                if (fromCell.walls.includes('right') || toCell.walls.includes('left')) {
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+
+        function extendPath(r, c) {
+            if (path.length === 0) return;
+            
+            const head = path[path.length - 1];
+            
+            // Already at this position
+            if (head.r === r && head.c === c) return;
+            
+            // Not adjacent
+            if (!isAdjacent(head.r, head.c, r, c)) return;
+            
+            // Already in path (not allowing backtrack for now)
+            const existingIdx = path.findIndex(p => p.r === r && p.c === c);
+            if (existingIdx !== -1) {
+                // Backtrack to this position
+                path = path.slice(0, existingIdx + 1);
+                updateGridDisplay();
+                return;
+            }
+            
+            const cell = grid[r][c];
+            
+            // Check if this cell has a number
+            if (cell.number !== null) {
+                // Must be the next number in sequence
+                const currentNumbers = path
+                    .map(p => grid[p.r][p.c].number)
+                    .filter(n => n !== null);
+                const lastNumber = currentNumbers.length > 0 ? Math.max(...currentNumbers) : 0;
+                
+                if (cell.number !== lastNumber + 1) {
+                    return; // Can't visit this number yet
+                }
+            }
+            
+            path.push({r, c});
+            updateGridDisplay();
+            
+            // Check win condition
+            if (path.length === totalCells) {
+                // Verify all numbers were visited in order
+                const numbersInPath = path
+                    .map(p => grid[p.r][p.c].number)
+                    .filter(n => n !== null);
+                
+                if (numbersInPath.length === maxNumber) {
+                    let inOrder = true;
+                    for (let i = 0; i < numbersInPath.length - 1; i++) {
+                        if (numbersInPath[i] >= numbersInPath[i + 1]) {
+                            inOrder = false;
+                            break;
+                        }
+                    }
+                    if (inOrder) {
+                        setTimeout(showWinMessage, 300);
+                    }
+                }
+            }
+        }
+
+        function getDirection(from, to) {
+            if (to.r < from.r) return 'up';
+            if (to.r > from.r) return 'down';
+            if (to.c < from.c) return 'left';
+            if (to.c > from.c) return 'right';
+            return null;
+        }
+
+        function updateGridDisplay() {
+            // Clear all cells
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const cell = grid[r][c];
+                    cell.element.classList.remove('filled', 'path', 'current');
+                    cell.inPath = false;
+                    
+                    // Remove connectors
+                    cell.element.querySelectorAll('.connector').forEach(el => el.remove());
+                    
+                    // Reset number styling
+                    if (cell.numberEl) {
+                        cell.numberEl.classList.remove('active', 'completed');
+                    }
+                }
+            }
+            
+            // Mark path cells and add connectors
+            for (let i = 0; i < path.length; i++) {
+                const {r, c} = path[i];
+                const cell = grid[r][c];
+                cell.inPath = true;
+                
+                if (i === path.length - 1) {
+                    cell.element.classList.add('current');
+                    if (cell.numberEl) {
+                        cell.numberEl.classList.add('active');
+                    }
+                } else {
+                    cell.element.classList.add('path');
+                    if (cell.numberEl) {
+                        cell.numberEl.classList.add('completed');
+                    }
+                }
+                
+                // Add connectors
+                if (i > 0) {
+                    const prev = path[i - 1];
+                    const dir = getDirection(prev, path[i]);
+                    addConnector(prev.r, prev.c, dir);
+                    addConnector(r, c, opposite(dir));
+                }
+            }
+            
+            updateStatus();
+        }
+
+        function opposite(dir) {
+            const opposites = {up: 'down', down: 'up', left: 'right', right: 'left'};
+            return opposites[dir];
+        }
+
+        function addConnector(r, c, direction) {
+            const cell = grid[r][c];
+            const connector = document.createElement('div');
+            connector.className = `connector ${direction === 'left' || direction === 'right' ? 'horizontal' : 'vertical'} ${direction}`;
+            cell.element.appendChild(connector);
+        }
+
+        function updateStatus() {
+            document.getElementById('progress').textContent = `${path.length}/${totalCells}`;
+            
+            const numbersInPath = path
+                .map(p => grid[p.r][p.c].number)
+                .filter(n => n !== null);
+            const nextNum = numbersInPath.length > 0 ? Math.max(...numbersInPath) + 1 : 1;
+            document.getElementById('next-number').textContent = nextNum <= maxNumber ? nextNum : '✓';
+        }
+
+        function showWinMessage() {
+            document.getElementById('overlay').classList.add('show');
+            document.getElementById('message').classList.add('show');
+        }
+
+        function hideMessage() {
+            document.getElementById('overlay').classList.remove('show');
+            document.getElementById('message').classList.remove('show');
+        }
+
+        function resetPuzzle() {
+            path = [];
+            isDragging = false;
+            updateGridDisplay();
+        }
+
+        function newPuzzle() {
+            currentPuzzle = (currentPuzzle + 1) % puzzles.length;
+            loadPuzzle(currentPuzzle);
+            hideMessage();
+        }
+
+        // Initialize
+        loadPuzzle(0);
+
+        // Prevent scrolling on touch devices
+        document.body.addEventListener('touchmove', (e) => {
+            if (isDragging) e.preventDefault();
+        }, {passive: false});
+
+        // ========== LEVEL CREATOR ==========
+        let creatorGrid = [];
+        let creatorNumbers = [];
+        let creatorWalls = [];
+        let nextNumber = 1;
+
+        function setMode(mode) {
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`.mode-btn[onclick="setMode('${mode}')"]`).classList.add('active');
+            
+            document.getElementById('game-mode').classList.toggle('active', mode === 'play');
+            document.getElementById('create-mode').classList.toggle('active', mode === 'create');
+            
+            if (mode === 'create') {
+                initCreatorGrid();
+            }
+        }
+
+        function initCreatorGrid() {
+            const gridEl = document.getElementById('creator-grid');
+            gridEl.innerHTML = '';
+            creatorGrid = [];
+            
+            for (let r = 0; r < 8; r++) {
+                creatorGrid[r] = [];
+                for (let c = 0; c < 8; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'creator-cell';
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    
+                    // Add edge zones for wall placement
+                    ['top', 'bottom', 'left', 'right'].forEach(side => {
+                        const edge = document.createElement('div');
+                        edge.className = `edge-zone ${side}`;
+                        edge.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            toggleWall(r, c, side);
+                        });
+                        cell.appendChild(edge);
+                    });
+                    
+                    // Center click for numbers
+                    cell.addEventListener('click', (e) => {
+                        if (!e.target.classList.contains('edge-zone')) {
+                            placeNumber(r, c);
+                        }
+                    });
+                    
+                    // Right-click to remove number
+                    cell.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        removeNumber(r, c);
+                    });
+                    
+                    gridEl.appendChild(cell);
+                    creatorGrid[r][c] = {
+                        element: cell,
+                        number: null,
+                        numberEl: null,
+                        walls: []
+                    };
+                }
+            }
+            
+            // Restore existing state if any
+            renderCreatorState();
+        }
+
+        function placeNumber(r, c) {
+            const cell = creatorGrid[r][c];
+            
+            // If cell already has a number, don't place another
+            if (cell.number !== null) return;
+            
+            // Create number element
+            const numberEl = document.createElement('div');
+            numberEl.className = 'number';
+            numberEl.textContent = nextNumber;
+            cell.element.appendChild(numberEl);
+            
+            cell.number = nextNumber;
+            cell.numberEl = numberEl;
+            creatorNumbers.push({n: nextNumber, r, c});
+            
+            nextNumber++;
+            updateOutput();
+        }
+
+        function removeNumber(r, c) {
+            const cell = creatorGrid[r][c];
+            if (cell.number === null) return;
+            
+            const removedNumber = cell.number;
+            
+            // Remove the number element
+            if (cell.numberEl) {
+                cell.numberEl.remove();
+            }
+            cell.number = null;
+            cell.numberEl = null;
+            
+            // Remove from array
+            creatorNumbers = creatorNumbers.filter(n => !(n.r === r && n.c === c));
+            
+            // Renumber all numbers higher than the removed one
+            creatorNumbers.forEach(numData => {
+                if (numData.n > removedNumber) {
+                    numData.n--;
+                    const cell = creatorGrid[numData.r][numData.c];
+                    if (cell.numberEl) {
+                        cell.numberEl.textContent = numData.n;
+                    }
+                    cell.number = numData.n;
+                }
+            });
+            
+            nextNumber--;
+            updateOutput();
+        }
+
+        function undoLastNumber() {
+            if (creatorNumbers.length === 0) return;
+            
+            const last = creatorNumbers[creatorNumbers.length - 1];
+            removeNumber(last.r, last.c);
+        }
+
+        function toggleWall(r, c, side) {
+            const cell = creatorGrid[r][c];
+            const wallIndex = cell.walls.indexOf(side);
+            
+            if (wallIndex === -1) {
+                // Add wall
+                cell.walls.push(side);
+                cell.element.classList.add(`wall-${side}`);
+                
+                // Add to walls array (need both sides for the format)
+                creatorWalls.push({r, c, side});
+                
+                // Also add the opposite wall on the adjacent cell
+                const adjacent = getAdjacentCell(r, c, side);
+                if (adjacent) {
+                    const oppSide = opposite(side);
+                    const adjCell = creatorGrid[adjacent.r][adjacent.c];
+                    if (!adjCell.walls.includes(oppSide)) {
+                        adjCell.walls.push(oppSide);
+                        adjCell.element.classList.add(`wall-${oppSide}`);
+                        creatorWalls.push({r: adjacent.r, c: adjacent.c, side: oppSide});
+                    }
+                }
+            } else {
+                // Remove wall
+                cell.walls.splice(wallIndex, 1);
+                cell.element.classList.remove(`wall-${side}`);
+                creatorWalls = creatorWalls.filter(w => !(w.r === r && w.c === c && w.side === side));
+                
+                // Also remove the opposite wall on the adjacent cell
+                const adjacent = getAdjacentCell(r, c, side);
+                if (adjacent) {
+                    const oppSide = opposite(side);
+                    const adjCell = creatorGrid[adjacent.r][adjacent.c];
+                    const adjWallIndex = adjCell.walls.indexOf(oppSide);
+                    if (adjWallIndex !== -1) {
+                        adjCell.walls.splice(adjWallIndex, 1);
+                        adjCell.element.classList.remove(`wall-${oppSide}`);
+                        creatorWalls = creatorWalls.filter(w => !(w.r === adjacent.r && w.c === adjacent.c && w.side === oppSide));
+                    }
+                }
+            }
+            
+            updateOutput();
+        }
+
+        function getAdjacentCell(r, c, side) {
+            switch(side) {
+                case 'top': return r > 0 ? {r: r-1, c} : null;
+                case 'bottom': return r < 7 ? {r: r+1, c} : null;
+                case 'left': return c > 0 ? {r, c: c-1} : null;
+                case 'right': return c < 7 ? {r, c: c+1} : null;
+            }
+            return null;
+        }
+
+        function updateOutput() {
+            const output = {
+                numbers: creatorNumbers.map(n => ({n: n.n, r: n.r, c: n.c})),
+                walls: creatorWalls.map(w => ({r: w.r, c: w.c, side: w.side}))
+            };
+            
+            document.getElementById('level-output').value = JSON.stringify(output, null, 2);
+        }
+
+        function clearCreator() {
+            creatorNumbers = [];
+            creatorWalls = [];
+            nextNumber = 1;
+            initCreatorGrid();
+            updateOutput();
+        }
+
+        function renderCreatorState() {
+            // Re-render numbers
+            creatorNumbers.forEach(({n, r, c}) => {
+                const cell = creatorGrid[r][c];
+                const numberEl = document.createElement('div');
+                numberEl.className = 'number';
+                numberEl.textContent = n;
+                cell.element.appendChild(numberEl);
+                cell.number = n;
+                cell.numberEl = numberEl;
+            });
+            
+            // Re-render walls
+            creatorWalls.forEach(({r, c, side}) => {
+                const cell = creatorGrid[r][c];
+                if (!cell.walls.includes(side)) {
+                    cell.walls.push(side);
+                }
+                cell.element.classList.add(`wall-${side}`);
+            });
+            
+            updateOutput();
+        }
+
+        function copyOutput() {
+            const textarea = document.getElementById('level-output');
+            textarea.select();
+            document.execCommand('copy');
+            
+            // Visual feedback
+            const btn = document.querySelector('.btn-copy');
+            const originalText = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = originalText, 1500);
+        }
+
+        function testLevel() {
+            if (creatorNumbers.length < 2) {
+                alert('Please add at least 2 numbers to test the level.');
+                return;
+            }
+            
+            // Create a temporary puzzle from the creator state
+            const testPuzzle = {
+                numbers: creatorNumbers.map(n => ({n: n.n, r: n.r, c: n.c})),
+                walls: creatorWalls.map(w => ({r: w.r, c: w.c, side: w.side}))
+            };
+            
+            // Add to puzzles temporarily and switch to play mode
+            puzzles.unshift(testPuzzle);
+            currentPuzzle = 0;
+            loadPuzzle(0);
+            setMode('play');
+        }
+    </script>
+</body>
+</html>
