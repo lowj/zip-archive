@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zip - Archive Enabled</title>
+    <title>Zip - Dynamic Grid</title>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Mono:wght@700&display=swap" rel="stylesheet">
     <style>
         * {
@@ -81,16 +81,20 @@
             box-shadow: 
                 0 4px 6px rgba(0, 0, 0, 0.04),
                 0 10px 40px rgba(0, 0, 0, 0.08);
+            /* Allow scrolling if grid is huge on small screen */
+            overflow: auto;
+            max-width: 100%; 
         }
 
         .grid {
             display: grid;
-            grid-template-columns: repeat(8, 1fr);
+            /* grid-template-columns is now set via JS */
             gap: 0;
             border: 2px solid var(--grid-border);
             border-radius: 8px;
-            overflow: hidden;
+            /* overflow: hidden; removed to ensure borders render cleanly */
             position: relative;
+            margin: 0 auto;
         }
 
         .cell {
@@ -352,6 +356,33 @@
             width: 100%;
             max-width: 440px;
         }
+        
+        /* New styling for size inputs */
+        .size-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: white;
+            padding: 8px 16px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .size-input {
+            width: 50px;
+            padding: 8px;
+            border: 2px solid var(--grid-border);
+            border-radius: 6px;
+            font-family: 'Space Mono', monospace;
+            text-align: center;
+            font-size: 1rem;
+        }
+        .size-separator { font-weight: bold; color: #888; }
+        .btn-set-size { 
+            padding: 8px 16px; 
+            font-size: 0.9rem;
+            background: var(--number-bg);
+            color: white;
+        }
 
         .creator-container {
             flex-direction: column;
@@ -497,6 +528,15 @@
         </div>
 
         <div class="creator-container" id="create-mode">
+            
+            <div class="size-controls">
+                <label>Grid Size:</label>
+                <input type="number" id="create-width" class="size-input" value="8" min="3" max="15">
+                <span class="size-separator">×</span>
+                <input type="number" id="create-height" class="size-input" value="8" min="3" max="15">
+                <button class="btn-set-size" onclick="resizeCreator()">Set</button>
+            </div>
+
             <div class="grid-wrapper">
                 <div class="grid" id="creator-grid"></div>
             </div>
@@ -537,6 +577,7 @@
         // Built-in puzzles (Fallbacks)
         const builtInPuzzles = [
             {
+                width: 8, height: 8,
                 numbers: [
                     {n: 1, r: 2, c: 6}, {n: 2, r: 2, c: 5}, {n: 3, r: 5, c: 3},
                     {n: 4, r: 2, c: 4}, {n: 5, r: 2, c: 2}, {n: 6, r: 1, c: 2},
@@ -550,6 +591,7 @@
                 walls: []
             },
             {
+                width: 8, height: 8,
                 numbers: [
                     {n: 1, r: 0, c: 0}, {n: 2, r: 0, c: 3}, {n: 3, r: 2, c: 3},
                     {n: 4, r: 2, c: 0}, {n: 5, r: 4, c: 0}, {n: 6, r: 4, c: 3},
@@ -574,17 +616,28 @@
         let isDragging = false;
         let totalCells = 64;
         let maxNumber = 0;
+        
+        // Dimensions
+        let currentRows = 8;
+        let currentCols = 8;
 
         // --- GAME LOGIC ---
 
-        function initGrid() {
+        function initGrid(rows, cols) {
+            currentRows = rows;
+            currentCols = cols;
+            totalCells = rows * cols;
+            
             const gridEl = document.getElementById('grid');
             gridEl.innerHTML = '';
+            // Dynamic grid layout
+            gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+            
             grid = [];
             
-            for (let r = 0; r < 8; r++) {
+            for (let r = 0; r < rows; r++) {
                 grid[r] = [];
-                for (let c = 0; c < 8; c++) {
+                for (let c = 0; c < cols; c++) {
                     const cell = document.createElement('div');
                     cell.className = 'cell';
                     cell.dataset.row = r;
@@ -602,29 +655,38 @@
 
         function loadLevelData(puzzleData) {
             currentLevelData = puzzleData;
-            initGrid();
+            // Default to 8x8 if not specified (backward compatibility)
+            const w = puzzleData.width || 8;
+            const h = puzzleData.height || 8;
+            
+            initGrid(h, w);
             path = [];
             
             maxNumber = Math.max(...puzzleData.numbers.map(p => p.n));
             
             // Add numbers
             puzzleData.numbers.forEach(({n, r, c}) => {
-                const cell = grid[r][c];
-                const numberEl = document.createElement('div');
-                numberEl.className = 'number';
-                numberEl.textContent = n;
-                cell.element.appendChild(numberEl);
-                cell.number = n;
-                cell.numberEl = numberEl;
+                // Bounds check just in case
+                if (r < h && c < w) {
+                    const cell = grid[r][c];
+                    const numberEl = document.createElement('div');
+                    numberEl.className = 'number';
+                    numberEl.textContent = n;
+                    cell.element.appendChild(numberEl);
+                    cell.number = n;
+                    cell.numberEl = numberEl;
+                }
             });
 
             // Add walls
             if (puzzleData.walls) {
                 puzzleData.walls.forEach(({r, c, side}) => {
-                    const cell = grid[r][c];
-                    cell.element.classList.add(`wall-${side}`);
-                    if (!cell.walls) cell.walls = [];
-                    cell.walls.push(side);
+                    if (r < h && c < w) {
+                        const cell = grid[r][c];
+                        cell.element.classList.add(`wall-${side}`);
+                        if (!cell.walls) cell.walls = [];
+                        cell.walls.push(side);
+                    }
                 });
             }
 
@@ -649,10 +711,11 @@
             const newGridEl = gridEl.cloneNode(true);
             gridEl.parentNode.replaceChild(newGridEl, gridEl);
             
+            // Re-hydrate state from DOM after clone
             const cells = newGridEl.querySelectorAll('.cell');
             cells.forEach((cell, idx) => {
-                const r = Math.floor(idx / 8);
-                const c = idx % 8;
+                const r = Math.floor(idx / currentCols);
+                const c = idx % currentCols;
                 grid[r][c].element = cell;
                 const numberEl = cell.querySelector('.number');
                 if (numberEl) grid[r][c].numberEl = numberEl;
@@ -777,8 +840,8 @@
         }
 
         function updateGridDisplay() {
-            for (let r = 0; r < 8; r++) {
-                for (let c = 0; c < 8; c++) {
+            for (let r = 0; r < currentRows; r++) {
+                for (let c = 0; c < currentCols; c++) {
                     const cell = grid[r][c];
                     cell.element.classList.remove('filled', 'path', 'current');
                     cell.element.querySelectorAll('.connector').forEach(el => el.remove());
@@ -839,20 +902,45 @@
             document.getElementById('create-mode').classList.toggle('active', mode === 'create');
             document.getElementById('archive-mode').classList.toggle('active', mode === 'archive');
             
-            if (mode === 'create') initCreatorGrid();
+            if (mode === 'create') {
+                // Initialize creator grid with current settings
+                const w = parseInt(document.getElementById('create-width').value);
+                const h = parseInt(document.getElementById('create-height').value);
+                initCreatorGrid(h, w);
+            }
             if (mode === 'archive') renderArchive();
         }
 
         // --- CREATOR LOGIC ---
         let creatorGrid = [], creatorNumbers = [], creatorWalls = [], nextCreatorNumber = 1;
+        let creatorRows = 8, creatorCols = 8;
 
-        function initCreatorGrid() {
+        function resizeCreator() {
+            const w = parseInt(document.getElementById('create-width').value);
+            const h = parseInt(document.getElementById('create-height').value);
+            if(w < 3 || h < 3 || w > 15 || h > 15) {
+                alert("Size must be between 3x3 and 15x15");
+                return;
+            }
+            // Clear current data when resizing
+            if(confirm("Changing size will clear the current layout. Continue?")) {
+                clearCreator();
+                initCreatorGrid(h, w);
+            }
+        }
+
+        function initCreatorGrid(rows, cols) {
+            creatorRows = rows;
+            creatorCols = cols;
+            
             const gridEl = document.getElementById('creator-grid');
             gridEl.innerHTML = '';
+            gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+            
             creatorGrid = [];
-            for (let r = 0; r < 8; r++) {
+            for (let r = 0; r < rows; r++) {
                 creatorGrid[r] = [];
-                for (let c = 0; c < 8; c++) {
+                for (let c = 0; c < cols; c++) {
                     const cell = document.createElement('div');
                     cell.className = 'creator-cell';
                     cell.dataset.row = r;
@@ -872,7 +960,8 @@
                     creatorGrid[r][c] = { element: cell, number: null, numberEl: null, walls: [] };
                 }
             }
-            renderCreatorState();
+            // updateOutput called inside to set initial JSON
+            updateOutput();
         }
 
         function placeNumber(r, c) {
@@ -956,14 +1045,16 @@
 
         function getAdj(r, c, side) {
             if (side === 'top' && r > 0) return {r: r-1, c};
-            if (side === 'bottom' && r < 7) return {r: r+1, c};
+            if (side === 'bottom' && r < creatorRows - 1) return {r: r+1, c};
             if (side === 'left' && c > 0) return {r, c: c-1};
-            if (side === 'right' && c < 7) return {r, c: c+1};
+            if (side === 'right' && c < creatorCols - 1) return {r, c: c+1};
             return null;
         }
 
         function updateOutput() {
             const out = {
+                width: creatorCols,
+                height: creatorRows,
                 numbers: creatorNumbers.map(n => ({n: n.n, r: n.r, c: n.c})),
                 walls: creatorWalls.map(w => ({r: w.r, c: w.c, side: w.side}))
             };
@@ -972,21 +1063,30 @@
 
         function clearCreator() {
             creatorNumbers = []; creatorWalls = []; nextCreatorNumber = 1;
-            initCreatorGrid();
+            // Re-init with currently selected input values
+            const w = parseInt(document.getElementById('create-width').value);
+            const h = parseInt(document.getElementById('create-height').value);
+            initCreatorGrid(h, w);
         }
 
         function renderCreatorState() {
+            // Note: This function assumes the grid dimensions haven't changed externally
+            // or that creatorGrid is already init to correct size.
             creatorNumbers.forEach(({n, r, c}) => {
-                const cell = creatorGrid[r][c];
-                const nel = document.createElement('div');
-                nel.className = 'number'; nel.textContent = n;
-                cell.element.appendChild(nel);
-                cell.number = n; cell.numberEl = nel;
+                if(r < creatorRows && c < creatorCols) {
+                    const cell = creatorGrid[r][c];
+                    const nel = document.createElement('div');
+                    nel.className = 'number'; nel.textContent = n;
+                    cell.element.appendChild(nel);
+                    cell.number = n; cell.numberEl = nel;
+                }
             });
             creatorWalls.forEach(({r, c, side}) => {
-                const cell = creatorGrid[r][c];
-                if (!cell.walls.includes(side)) cell.walls.push(side);
-                cell.element.classList.add(`wall-${side}`);
+                if(r < creatorRows && c < creatorCols) {
+                    const cell = creatorGrid[r][c];
+                    if (!cell.walls.includes(side)) cell.walls.push(side);
+                    cell.element.classList.add(`wall-${side}`);
+                }
             });
             updateOutput();
         }
@@ -1000,6 +1100,8 @@
         function testLevel() {
             if (creatorNumbers.length < 2) { alert('Need at least 2 numbers'); return; }
             const testPuz = {
+                width: creatorCols,
+                height: creatorRows,
                 numbers: creatorNumbers.map(n => ({n: n.n, r: n.r, c: n.c})),
                 walls: creatorWalls.map(w => ({r: w.r, c: w.c, side: w.side}))
             };
@@ -1016,16 +1118,13 @@
             gridEl.innerHTML = '<p style="text-align:center; width:100%; color:#888;">Loading...</p>';
 
             try {
-                // Fetch the master list of levels
                 const response = await fetch('archive/levels.json');
                 if (!response.ok) throw new Error('Could not find archive/levels.json');
                 
                 const levels = await response.json();
-                
-                // Sort descending (newest first)
                 levels.sort((a, b) => b - a);
 
-                gridEl.innerHTML = ''; // Clear loading text
+                gridEl.innerHTML = ''; 
 
                 if (levels.length === 0) {
                     gridEl.innerHTML = '<p style="text-align:center; width:100%; color:#888;">No levels found in levels.json</p>';
