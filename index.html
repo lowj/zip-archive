@@ -796,12 +796,21 @@
             if (path.length === 0) return;
             const head = path[path.length - 1];
             if (head.r === r && head.c === c) return;
+            
             if (!isAdjacent(head.r, head.c, r, c)) return;
             
             const existingIdx = path.findIndex(p => p.r === r && p.c === c);
             if (existingIdx !== -1) {
-                path = path.slice(0, existingIdx + 1);
-                updateGridDisplay();
+                // Check if we are backtracking (undoing the last step)
+                // path.length - 2 is the index of the second to last element
+                if (existingIdx === path.length - 2) {
+                    path.pop();
+                    updateGridDisplay();
+                    return;
+                }
+                
+                // If it's not a backtrack (e.g. crossing an earlier part of the path), 
+                // do nothing to prevent accidental deletions.
                 return;
             }
             
