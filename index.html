@@ -814,12 +814,9 @@
                 return;
             }
             
-            const cell = grid[r][c];
-            if (cell.number !== null) {
-                const currentNumbers = path.map(p => grid[p.r][p.c].number).filter(n => n !== null);
-                const lastNumber = currentNumbers.length > 0 ? Math.max(...currentNumbers) : 0;
-                if (cell.number !== lastNumber + 1) return;
-            }
+            // --- REMOVED STRICT NUMBER CHECK HERE ---
+            // Previously, there was code here checking if cell.number === lastNumber + 1.
+            // By removing it, we allow out-of-order traversal.
             
             path.push({r, c});
             updateGridDisplay();
