@@ -74,6 +74,23 @@
             margin-top: 4px;
         }
 
+        .timer {
+            font-family: 'Space Mono', monospace;
+            font-size: 1.0rem; 
+            font-weight: 700;
+            color: #333;
+            background: white;
+            padding: 4px 16px;       /* Reduced padding */
+            border-radius: 8px;      /* Smaller radius */
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border: 2px solid var(--grid-border);
+            letter-spacing: 0.5px;
+            
+            /* Negative margins to reduce visual gaps between header/grid */
+            margin-top: -10px;
+            margin-bottom: -10px;
+        }
+
         .grid-wrapper {
             background: var(--grid-bg);
             border-radius: 16px;
@@ -81,18 +98,15 @@
             box-shadow: 
                 0 4px 6px rgba(0, 0, 0, 0.04),
                 0 10px 40px rgba(0, 0, 0, 0.08);
-            /* Allow scrolling if grid is huge on small screen */
             overflow: auto;
             max-width: 100%; 
         }
 
         .grid {
             display: grid;
-            /* grid-template-columns is now set via JS */
             gap: 0;
             border: 2px solid var(--grid-border);
             border-radius: 8px;
-            /* overflow: hidden; removed to ensure borders render cleanly */
             position: relative;
             margin: 0 auto;
         }
@@ -327,7 +341,6 @@
             max-width: 440px;
         }
         
-        /* New styling for size inputs */
         .size-controls {
             display: flex;
             align-items: center;
@@ -471,6 +484,8 @@
         </div>
 
         <div class="game-container active" id="game-mode">
+            <div id="timer" class="timer">00:00</div>
+
             <div class="grid-wrapper">
                 <div class="grid" id="grid"></div>
             </div>
@@ -529,6 +544,7 @@
     <div class="message" id="message">
         <h2>🎉 Complete!</h2>
         <p>You solved the puzzle!</p>
+        <p id="completion-time" style="font-family:'Space Mono',monospace; margin:16px 0; color:#666; font-size:1.1rem">00:00</p>
         <button class="btn-new" onclick="loadNextBuiltIn(); hideMessage();">Next Level</button>
     </div>
 
@@ -576,9 +592,43 @@
         let totalCells = 64;
         let maxNumber = 0;
         
+        // Timer State
+        let timerInterval = null;
+        let timerSeconds = 0;
+
         // Dimensions
         let currentRows = 8;
         let currentCols = 8;
+
+        // --- TIMER LOGIC ---
+        function startTimer() {
+            stopTimer();
+            timerSeconds = 0;
+            updateTimerDisplay();
+            timerInterval = setInterval(() => {
+                timerSeconds++;
+                updateTimerDisplay();
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function updateTimerDisplay() {
+            const timeStr = formatTime(timerSeconds);
+            document.getElementById('timer').textContent = timeStr;
+            document.getElementById('completion-time').textContent = `Time: ${timeStr}`;
+        }
+
+        function formatTime(totalSeconds) {
+            const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+            const s = (totalSeconds % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
 
         // --- GAME LOGIC ---
 
@@ -651,6 +701,7 @@
 
             updateStatus();
             setupEventListeners();
+            startTimer(); // Reset and start timer on new level
         }
 
         function loadNextBuiltIn() {
@@ -773,10 +824,6 @@
                 return;
             }
             
-            // --- REMOVED STRICT NUMBER CHECK HERE ---
-            // Previously, there was code here checking if cell.number === lastNumber + 1.
-            // By removing it, we allow out-of-order traversal.
-            
             path.push({r, c});
             updateGridDisplay();
             
@@ -845,6 +892,7 @@
         }
 
         function showWinMessage() {
+            stopTimer(); // Stop counting when won
             document.getElementById('overlay').classList.add('show');
             document.getElementById('message').classList.add('show');
         }
@@ -863,6 +911,9 @@
             document.getElementById('create-mode').classList.toggle('active', mode === 'create');
             document.getElementById('archive-mode').classList.toggle('active', mode === 'archive');
             
+            // Optional: Pause timer if leaving play mode
+            if (mode !== 'play') stopTimer();
+
             if (mode === 'create') {
                 // Initialize creator grid with current settings
                 const w = parseInt(document.getElementById('create-width').value);
@@ -883,7 +934,6 @@
                 alert("Size must be between 3x3 and 15x15");
                 return;
             }
-            // Clear current data when resizing
             if(confirm("Changing size will clear the current layout. Continue?")) {
                 clearCreator();
                 initCreatorGrid(h, w);
@@ -921,7 +971,6 @@
                     creatorGrid[r][c] = { element: cell, number: null, numberEl: null, walls: [] };
                 }
             }
-            // updateOutput called inside to set initial JSON
             updateOutput();
         }
 
@@ -973,7 +1022,6 @@
                 cell.walls.push(side);
                 cell.element.classList.add(`wall-${side}`);
                 creatorWalls.push({r, c, side});
-                // Add adjacent
                 const adj = getAdj(r, c, side);
                 if (adj) {
                     const opp = opposite(side);
@@ -988,7 +1036,6 @@
                 cell.walls.splice(idx, 1);
                 cell.element.classList.remove(`wall-${side}`);
                 creatorWalls = creatorWalls.filter(w => !(w.r === r && w.c === c && w.side === side));
-                // Remove adjacent
                 const adj = getAdj(r, c, side);
                 if (adj) {
                     const opp = opposite(side);
@@ -1024,32 +1071,9 @@
 
         function clearCreator() {
             creatorNumbers = []; creatorWalls = []; nextCreatorNumber = 1;
-            // Re-init with currently selected input values
             const w = parseInt(document.getElementById('create-width').value);
             const h = parseInt(document.getElementById('create-height').value);
             initCreatorGrid(h, w);
-        }
-
-        function renderCreatorState() {
-            // Note: This function assumes the grid dimensions haven't changed externally
-            // or that creatorGrid is already init to correct size.
-            creatorNumbers.forEach(({n, r, c}) => {
-                if(r < creatorRows && c < creatorCols) {
-                    const cell = creatorGrid[r][c];
-                    const nel = document.createElement('div');
-                    nel.className = 'number'; nel.textContent = n;
-                    cell.element.appendChild(nel);
-                    cell.number = n; cell.numberEl = nel;
-                }
-            });
-            creatorWalls.forEach(({r, c, side}) => {
-                if(r < creatorRows && c < creatorCols) {
-                    const cell = creatorGrid[r][c];
-                    if (!cell.walls.includes(side)) cell.walls.push(side);
-                    cell.element.classList.add(`wall-${side}`);
-                }
-            });
-            updateOutput();
         }
 
         function copyOutput() {
