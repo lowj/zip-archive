@@ -190,36 +190,6 @@
             background: linear-gradient(135deg, var(--path-start), var(--path-end));
         }
 
-        .status-bar {
-            display: flex;
-            gap: 24px;
-            align-items: center;
-            padding: 12px 20px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-        }
-
-        .stat {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .stat-value {
-            font-family: 'Space Mono', monospace;
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--number-bg);
-        }
-
-        .stat-label {
-            font-size: 0.75rem;
-            color: #888;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
         .controls {
             display: flex;
             gap: 12px;
@@ -503,17 +473,6 @@
         <div class="game-container active" id="game-mode">
             <div class="grid-wrapper">
                 <div class="grid" id="grid"></div>
-            </div>
-
-            <div class="status-bar">
-                <div class="stat">
-                    <span class="stat-value" id="progress">0/64</span>
-                    <span class="stat-label">Cells Filled</span>
-                </div>
-                <div class="stat">
-                    <span class="stat-value" id="next-number">1</span>
-                    <span class="stat-label">Next Number</span>
-                </div>
             </div>
 
             <div class="controls">
@@ -883,10 +842,6 @@
         }
 
         function updateStatus() {
-            document.getElementById('progress').textContent = `${path.length}/${totalCells}`;
-            const numbersInPath = path.map(p => grid[p.r][p.c].number).filter(n => n !== null);
-            const nextNum = numbersInPath.length > 0 ? Math.max(...numbersInPath) + 1 : 1;
-            document.getElementById('next-number').textContent = nextNum <= maxNumber ? nextNum : '✓';
         }
 
         function showWinMessage() {
