@@ -74,6 +74,14 @@
             margin-top: 4px;
         }
 
+        .timer-row {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            margin-top: -10px;
+            margin-bottom: -10px;
+        }
+
         .timer {
             font-family: 'Space Mono', monospace;
             font-size: 1.0rem; 
@@ -85,8 +93,45 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
             border: 2px solid var(--grid-border);
             letter-spacing: 0.5px;
-            margin-top: -10px;
-            margin-bottom: -10px;
+        }
+
+        .btn-icon {
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid var(--grid-border);
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-icon:hover {
+            background: #f5f5f5;
+            border-color: #ccc;
+        }
+
+        .btn-icon .icon-svg {
+            width: 18px;
+            height: 18px;
+            fill: #333;
+        }
+
+        .btn-icon.btn-shuffle {
+            background: linear-gradient(135deg, var(--path-start), var(--path-end));
+            border: none;
+        }
+
+        .btn-icon.btn-shuffle:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(74, 144, 217, 0.35);
+        }
+
+        .btn-icon.btn-shuffle .icon-svg {
+            fill: white;
         }
 
         .grid-wrapper {
@@ -500,20 +545,22 @@
         </div>
 
         <div class="game-container active" id="game-mode">
-            <div id="timer" class="timer">00:00</div>
-
-            <div class="grid-wrapper">
-                <div class="grid" id="grid"></div>
-            </div>
-
-            <div class="controls">
-                <button class="btn-reset" onclick="resetPuzzle()">Reset</button>
-                <button class="btn-new" onclick="shuffleLevel()">
+            <div class="timer-row">
+                <button class="btn-icon" onclick="resetPuzzle()" title="Reset">
+                    <svg class="icon-svg" viewBox="0 0 24 24">
+                        <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                    </svg>
+                </button>
+                <div id="timer" class="timer">00:00</div>
+                <button class="btn-icon btn-shuffle" onclick="shuffleLevel()" title="Shuffle">
                     <svg class="icon-svg" viewBox="0 0 24 24">
                         <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>
                     </svg>
-                    Shuffle
                 </button>
+            </div>
+
+            <div class="grid-wrapper">
+                <div class="grid" id="grid"></div>
             </div>
 
             <p class="instructions">
