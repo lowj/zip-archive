@@ -100,6 +100,19 @@
             max-width: 100%; 
         }
 
+        .grid-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .path-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 15;
+        }
+
         .grid {
             display: grid;
             gap: 0;
@@ -107,6 +120,7 @@
             border-radius: 8px;
             position: relative;
             margin: 0 auto;
+            touch-action: none;
         }
 
         .cell {
@@ -118,7 +132,6 @@
             justify-content: center;
             position: relative;
             cursor: pointer;
-            transition: background-color 0.15s ease;
         }
 
         /* --- SNAKE STYLING --- */
@@ -136,6 +149,7 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+            will-change: transform;
         }
 
         .cell.current::before {
@@ -149,6 +163,7 @@
             background: linear-gradient(135deg, var(--path-start), var(--path-end));
             z-index: 4;
             pointer-events: none;
+            will-change: transform;
         }
 
         .connector.horizontal {
@@ -503,7 +518,10 @@
             <div id="timer" class="timer">00:00</div>
 
             <div class="grid-wrapper">
-                <div class="grid" id="grid"></div>
+                <div class="grid-container">
+                    <div class="grid" id="grid"></div>
+                    <canvas id="path-canvas" class="path-canvas"></canvas>
+                </div>
             </div>
 
             <div class="controls">
@@ -698,6 +716,96 @@
                     };
                 }
             }
+            
+            // Set up canvas overlay after grid is rendered
+            requestAnimationFrame(() => initCanvas());
+        }
+        
+        // Canvas state
+        let canvas, ctx;
+        let cursorX = 0, cursorY = 0;
+        let pathThickness = 30;
+        
+        function initCanvas() {
+            canvas = document.getElementById('path-canvas');
+            const gridEl = document.getElementById('grid');
+            
+            // Match canvas size to grid
+            const rect = gridEl.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+            
+            ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            
+            // Get path thickness from CSS
+            const rootStyles = getComputedStyle(document.documentElement);
+            pathThickness = parseInt(rootStyles.getPropertyValue('--path-thickness')) || 30;
+        }
+        
+        function getCellCenter(r, c) {
+            const gridEl = document.getElementById('grid');
+            const gridRect = gridEl.getBoundingClientRect();
+            const cell = grid[r][c].element;
+            const cellRect = cell.getBoundingClientRect();
+            
+            return {
+                x: cellRect.left - gridRect.left + cellRect.width / 2,
+                y: cellRect.top - gridRect.top + cellRect.height / 2
+            };
+        }
+        
+        function drawPartialPath(mouseX, mouseY) {
+            if (!ctx || path.length === 0 || !isDragging) {
+                clearCanvas();
+                return;
+            }
+            
+            const gridEl = document.getElementById('grid');
+            const gridRect = gridEl.getBoundingClientRect();
+            
+            // Convert mouse position to canvas coordinates
+            const canvasX = mouseX - gridRect.left;
+            const canvasY = mouseY - gridRect.top;
+            
+            // Get the head cell center
+            const head = path[path.length - 1];
+            const headCenter = getCellCenter(head.r, head.c);
+            
+            // Clear and redraw
+            clearCanvas();
+            
+            // Create gradient
+            const gradient = ctx.createLinearGradient(
+                headCenter.x, headCenter.y, canvasX, canvasY
+            );
+            gradient.addColorStop(0, '#7c5ce7');
+            gradient.addColorStop(1, '#9d7fee');
+            
+            // Draw line from head center to cursor
+            ctx.beginPath();
+            ctx.moveTo(headCenter.x, headCenter.y);
+            ctx.lineTo(canvasX, canvasY);
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = pathThickness;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+            
+            // Draw a circle at cursor position
+            ctx.beginPath();
+            ctx.arc(canvasX, canvasY, pathThickness / 2 * 1.2, 0, Math.PI * 2);
+            ctx.fillStyle = '#9d7fee';
+            ctx.fill();
+        }
+        
+        function clearCanvas() {
+            if (ctx && canvas) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
         }
 
         function loadLevelData(puzzleData) {
@@ -708,6 +816,8 @@
             
             initGrid(h, w);
             path = [];
+            prevPathLength = 0;
+            prevPathCells = new Set();
             
             maxNumber = Math.max(...puzzleData.numbers.map(p => p.n));
             
@@ -807,7 +917,15 @@
             newGridEl.addEventListener('touchstart', handleStart, {passive: false});
             newGridEl.addEventListener('touchmove', handleMove, {passive: false});
             document.addEventListener('touchend', handleEnd);
+            
+            // Reinitialize canvas after grid is set up
+            requestAnimationFrame(() => initCanvas());
         }
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (canvas) initCanvas();
+        });
 
         function getCellFromEvent(e) {
             let target = e.touches ? document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY) : e.target;
@@ -837,15 +955,36 @@
         function handleMove(e) {
             if (!isDragging) return;
             e.preventDefault();
-            const data = getCellFromEvent(e);
-            if (!data) return;
-            extendPath(data.r, data.c);
+            
+            // Get cursor position for partial path drawing
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            // Draw partial path immediately for smooth visual feedback
+            drawPartialPath(clientX, clientY);
+            
+            // Use requestAnimationFrame for cell detection (less frequent)
+            if (handleMove.pending) return;
+            handleMove.pending = true;
+            
+            requestAnimationFrame(() => {
+                handleMove.pending = false;
+                const data = getCellFromEvent(e);
+                if (!data) return;
+                extendPath(data.r, data.c);
+            });
         }
+        handleMove.pending = false;
 
-        function handleEnd() { isDragging = false; }
+        function handleEnd() { 
+            isDragging = false; 
+            clearCanvas();
+        }
 
         function startPath(r, c) {
             path = [{r, c}];
+            prevPathLength = 0;
+            prevPathCells = new Set();
             isDragging = true;
             updateGridDisplay();
         }
@@ -923,34 +1062,73 @@
             return map[dir];
         }
 
+        // Track previous path state for incremental updates
+        let prevPathLength = 0;
+        let prevPathCells = new Set();
+
         function updateGridDisplay() {
-            for (let r = 0; r < currentRows; r++) {
-                for (let c = 0; c < currentCols; c++) {
+            const currentPathCells = new Set(path.map(p => `${p.r},${p.c}`));
+            
+            // Remove styling from cells no longer in path
+            prevPathCells.forEach(key => {
+                if (!currentPathCells.has(key)) {
+                    const [r, c] = key.split(',').map(Number);
                     const cell = grid[r][c];
                     cell.element.classList.remove('filled', 'path', 'current');
                     cell.element.querySelectorAll('.connector').forEach(el => el.remove());
                     if (cell.numberEl) cell.numberEl.classList.remove('active', 'completed');
                 }
-            }
+            });
+            
+            // Update only changed cells
             for (let i = 0; i < path.length; i++) {
                 const {r, c} = path[i];
                 const cell = grid[r][c];
+                const key = `${r},${c}`;
+                const wasInPath = prevPathCells.has(key);
+                const isHead = i === path.length - 1;
+                const wasHead = wasInPath && i === prevPathLength - 1;
                 
-                if (i === path.length - 1) {
-                    cell.element.classList.add('current');
-                    if (cell.numberEl) cell.numberEl.classList.add('active');
-                } else {
-                    cell.element.classList.add('path');
-                    if (cell.numberEl) cell.numberEl.classList.add('completed');
+                // Only update if state changed
+                if (!wasInPath || isHead !== wasHead) {
+                    cell.element.classList.remove('filled', 'path', 'current');
+                    cell.element.querySelectorAll('.connector').forEach(el => el.remove());
+                    
+                    if (isHead) {
+                        cell.element.classList.add('current');
+                        if (cell.numberEl) {
+                            cell.numberEl.classList.remove('completed');
+                            cell.numberEl.classList.add('active');
+                        }
+                    } else {
+                        cell.element.classList.add('path');
+                        if (cell.numberEl) {
+                            cell.numberEl.classList.remove('active');
+                            cell.numberEl.classList.add('completed');
+                        }
+                    }
                 }
                 
+                // Add connectors (always rebuild for simplicity - they're cheap)
                 if (i > 0) {
                     const prev = path[i - 1];
                     const dir = getDirection(prev, path[i]);
-                    addConnector(prev.r, prev.c, dir);
-                    addConnector(r, c, opposite(dir));
+                    
+                    // Only add if not already present
+                    if (!grid[prev.r][prev.c].element.querySelector(`.connector.${dir}`)) {
+                        addConnector(prev.r, prev.c, dir);
+                    }
+                    const oppDir = opposite(dir);
+                    if (!cell.element.querySelector(`.connector.${oppDir}`)) {
+                        addConnector(r, c, oppDir);
+                    }
                 }
             }
+            
+            // Store state for next update
+            prevPathLength = path.length;
+            prevPathCells = currentPathCells;
+            
             updateStatus();
         }
 
