@@ -98,7 +98,7 @@ jobs:
             --base main \
             --head "$BRANCH_NAME"
 
-          gh pr merge "$BRANCH_NAME"\
-            --auto
-            --squash
+          gh pr merge \
+            --auto \
+            --squash \
             --delete-branch
