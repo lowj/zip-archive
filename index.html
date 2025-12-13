@@ -80,13 +80,11 @@
             font-weight: 700;
             color: #333;
             background: white;
-            padding: 4px 16px;       /* Reduced padding */
-            border-radius: 8px;      /* Smaller radius */
+            padding: 4px 16px;
+            border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
             border: 2px solid var(--grid-border);
             letter-spacing: 0.5px;
-            
-            /* Negative margins to reduce visual gaps between header/grid */
             margin-top: -10px;
             margin-bottom: -10px;
         }
@@ -213,11 +211,21 @@
             font-family: 'DM Sans', sans-serif;
             font-weight: 500;
             font-size: 1rem;
-            padding: 14px 32px;
+            padding: 14px 28px;
             border: none;
             border-radius: 12px;
             cursor: pointer;
             transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .icon-svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
         }
 
         .btn-reset {
@@ -268,6 +276,13 @@
             font-size: 2rem;
             color: var(--success);
             margin-bottom: 8px;
+        }
+
+        .success-controls {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 24px;
         }
 
         .overlay {
@@ -467,6 +482,7 @@
             h1 { font-size: 2rem; }
             .controls { flex-direction: column; width: 100%; }
             button { width: 100%; }
+            .success-controls { flex-direction: column; }
         }
     </style>
 </head>
@@ -492,7 +508,12 @@
 
             <div class="controls">
                 <button class="btn-reset" onclick="resetPuzzle()">Reset</button>
-                <button class="btn-new" onclick="loadNextBuiltIn()">Next Level</button>
+                <button class="btn-new" onclick="shuffleLevel()">
+                    <svg class="icon-svg" viewBox="0 0 24 24">
+                        <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>
+                    </svg>
+                    Shuffle
+                </button>
             </div>
 
             <p class="instructions">
@@ -545,11 +566,25 @@
         <h2>🎉 Complete!</h2>
         <p>You solved the puzzle!</p>
         <p id="completion-time" style="font-family:'Space Mono',monospace; margin:16px 0; color:#666; font-size:1.1rem">00:00</p>
-        <button class="btn-new" onclick="loadNextBuiltIn(); hideMessage();">Next Level</button>
+        
+        <div class="success-controls">
+            <button class="btn-reset" onclick="replayLevel()">
+                <svg class="icon-svg" viewBox="0 0 24 24">
+                    <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                </svg>
+                Replay
+            </button>
+            <button class="btn-new" onclick="shuffleLevel(); hideMessage();">
+                <svg class="icon-svg" viewBox="0 0 24 24">
+                    <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>
+                </svg>
+                Shuffle
+            </button>
+        </div>
     </div>
 
     <script>
-        // Built-in puzzles (Fallbacks)
+        // Built-in puzzles (Fallbacks if no archive connection)
         const builtInPuzzles = [
             {
                 width: 8, height: 8,
@@ -591,6 +626,9 @@
         let isDragging = false;
         let totalCells = 64;
         let maxNumber = 0;
+        
+        // Archive State
+        let archiveLevels = []; // Store fetched level list here
         
         // Timer State
         let timerInterval = null;
@@ -735,6 +773,11 @@
             if (currentLevelData) {
                 loadLevelData(currentLevelData);
             }
+        }
+        
+        function replayLevel() {
+            resetPuzzle();
+            hideMessage();
         }
 
         function setupEventListeners() {
@@ -1123,42 +1166,75 @@
             setMode('play');
         }
 
-        // --- ARCHIVE LOGIC ---
+        // --- ARCHIVE & SHUFFLE LOGIC ---
+
+        // Attempt to load the list of levels immediately
+        async function loadArchiveIndex() {
+            try {
+                const response = await fetch('archive/levels.json');
+                if (response.ok) {
+                    archiveLevels = await response.json();
+                    archiveLevels.sort((a, b) => b - a);
+                    return true;
+                }
+            } catch (e) {
+                console.warn("Could not load archive/levels.json. Falling back to built-in levels.");
+            }
+            return false;
+        }
+
+        // Randomly select a level and load it
+        async function shuffleLevel() {
+            hideMessage();
+            
+            // If we don't have the list yet, try to get it
+            if (archiveLevels.length === 0) {
+                const loaded = await loadArchiveIndex();
+                // If still no list (e.g. running locally without server), fallback
+                if (!loaded || archiveLevels.length === 0) {
+                    loadNextBuiltIn();
+                    return;
+                }
+            }
+
+            // Pick a random level
+            const randomIndex = Math.floor(Math.random() * archiveLevels.length);
+            const levelId = archiveLevels[randomIndex];
+            
+            fetchAndLoadLevel(levelId);
+        }
 
         async function renderArchive() {
             const gridEl = document.getElementById('archive-grid');
-            if (gridEl.children.length > 0) return; 
+            gridEl.innerHTML = ''; 
 
-            gridEl.innerHTML = '<p style="text-align:center; width:100%; color:#888;">Loading...</p>';
-
-            try {
-                const response = await fetch('archive/levels.json');
-                if (!response.ok) throw new Error('Could not find archive/levels.json');
-                
-                const levels = await response.json();
-                levels.sort((a, b) => b - a);
-
-                gridEl.innerHTML = ''; 
-
-                if (levels.length === 0) {
-                    gridEl.innerHTML = '<p style="text-align:center; width:100%; color:#888;">No levels found in levels.json</p>';
-                }
-
-                levels.forEach(levelId => {
-                    const btn = document.createElement('button');
-                    btn.className = 'level-card';
-                    btn.textContent = levelId;
-                    btn.onclick = () => fetchAndLoadLevel(levelId);
-                    gridEl.appendChild(btn);
-                });
-
-            } catch (e) {
-                gridEl.innerHTML = `<p style="text-align:center; width:100%; color:#d32f2f;">
-                    <strong>Error:</strong> Could not load <code>archive/levels.json</code>.<br>
-                    Make sure you created the file and are running on a local server.
-                </p>`;
-                console.error(e);
+            if (archiveLevels.length === 0) {
+                 gridEl.innerHTML = '<p style="text-align:center; width:100%; color:#888;">Loading...</p>';
+                 const success = await loadArchiveIndex();
+                 if (!success) {
+                     gridEl.innerHTML = `<p style="text-align:center; width:100%; color:#d32f2f;">
+                        <strong>Error:</strong> Could not load <code>archive/levels.json</code>.<br>
+                        Make sure you are running on a local server.
+                    </p>`;
+                    return;
+                 }
             }
+            
+            // Clear loading text
+            gridEl.innerHTML = '';
+
+            if (archiveLevels.length === 0) {
+                 gridEl.innerHTML = '<p style="text-align:center; width:100%; color:#888;">No levels found.</p>';
+                 return;
+            }
+
+            archiveLevels.forEach(levelId => {
+                const btn = document.createElement('button');
+                btn.className = 'level-card';
+                btn.textContent = levelId;
+                btn.onclick = () => fetchAndLoadLevel(levelId);
+                gridEl.appendChild(btn);
+            });
         }
 
         async function fetchAndLoadLevel(levelId) {
@@ -1173,12 +1249,26 @@
                 
             } catch (error) {
                 console.error(error);
-                alert(`Error loading level ${levelId}.\nCheck console for details.`);
+                // Only alert if we aren't doing the initial load
+                // (keeps console clean if user just opened file locally)
+                if(document.getElementById('grid').children.length > 0) {
+                     alert(`Error loading level ${levelId}.\nCheck console for details.`);
+                } else {
+                    // Fallback on initial load fail
+                    loadLevelData(builtInPuzzles[0]);
+                }
             }
         }
 
-        // Initialize with default
-        loadLevelData(builtInPuzzles[0]);
+        // Initialize Game
+        (async function initGame() {
+            const success = await loadArchiveIndex();
+            if (success) {
+                shuffleLevel();
+            } else {
+                loadLevelData(builtInPuzzles[0]);
+            }
+        })();
     </script>
 </body>
 </html>
