@@ -21,7 +21,9 @@
             --number-text: #ffffff;
             --path-start: #4a90d9;
             --path-end: #7c5ce7;
-            --path-thickness: 30px; 
+            --path-thickness: 30px;
+            --number-size: 36px;
+            --number-font-size: 18px;
             --success: #00c853;
         }
 
@@ -38,6 +40,12 @@
             -webkit-user-select: none;
         }
 
+        @media (max-width: 480px) {
+            body {
+                padding: 10px 0;
+            }
+        }
+
         .page-container {
             display: flex;
             flex-direction: column;
@@ -45,6 +53,12 @@
             gap: 24px;
             width: 100%;
             max-width: 600px;
+        }
+
+        @media (max-width: 480px) {
+            .page-container {
+                gap: 16px;
+            }
         }
 
         .game-container {
@@ -168,6 +182,15 @@
             max-width: 100%; 
         }
 
+        @media (max-width: 480px) {
+            .grid-wrapper {
+                padding: 0;
+                border-radius: 0;
+                box-shadow: none;
+                width: 100%;
+            }
+        }
+
         .grid {
             display: grid;
             gap: 0;
@@ -175,6 +198,14 @@
             border-radius: 8px;
             position: relative;
             margin: 0 auto;
+        }
+
+        @media (max-width: 480px) {
+            .grid {
+                border-radius: 0;
+                border-left: none;
+                border-right: none;
+            }
         }
 
         .cell {
@@ -245,8 +276,8 @@
         .cell.wall-right { border-right: 3px solid #1a1a1a; }
 
         .number {
-            width: 36px;
-            height: 36px;
+            width: var(--number-size);
+            height: var(--number-size);
             background: var(--number-bg);
             border-radius: 50%;
             display: flex;
@@ -255,7 +286,7 @@
             color: var(--number-text);
             font-family: 'DM Sans', sans-serif;
             font-weight: 700;
-            font-size: 18px;
+            font-size: var(--number-font-size);
             z-index: 10;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
             position: relative;
@@ -778,6 +809,16 @@
 
         // --- GAME LOGIC ---
 
+        function getCellSize(cols) {
+            const isMobile = window.innerWidth <= 480;
+            if (isMobile) {
+                // Use full viewport width, accounting for grid border (2px each side)
+                const availableWidth = window.innerWidth - 4;
+                return Math.floor(availableWidth / cols);
+            }
+            return 52; // Default desktop size
+        }
+
         function initGrid(rows, cols) {
             currentRows = rows;
             currentCols = cols;
@@ -785,8 +826,22 @@
             
             const gridEl = document.getElementById('grid');
             gridEl.innerHTML = '';
+            
+            const cellSize = getCellSize(cols);
+            const isMobile = window.innerWidth <= 480;
+            
             // Dynamic grid layout
-            gridEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+            gridEl.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+            
+            // Update CSS variables based on cell size
+            // Use larger ratios on mobile for better visibility
+            const pathThickness = Math.floor(cellSize * 0.58);
+            const numberSize = isMobile ? Math.floor(cellSize * 0.85) : Math.floor(cellSize * 0.69);
+            const numberFontSize = isMobile ? Math.floor(cellSize * 0.42) : Math.floor(cellSize * 0.35);
+            
+            document.documentElement.style.setProperty('--path-thickness', `${pathThickness}px`);
+            document.documentElement.style.setProperty('--number-size', `${numberSize}px`);
+            document.documentElement.style.setProperty('--number-font-size', `${numberFontSize}px`);
             
             grid = [];
             
@@ -795,6 +850,8 @@
                 for (let c = 0; c < cols; c++) {
                     const cell = document.createElement('div');
                     cell.className = 'cell';
+                    cell.style.width = `${cellSize}px`;
+                    cell.style.height = `${cellSize}px`;
                     cell.dataset.row = r;
                     cell.dataset.col = c;
                     gridEl.appendChild(cell);
@@ -1439,6 +1496,17 @@
                 loadLevelData(builtInPuzzles[0]);
             }
             updateNavButtons();
+            
+            // Handle resize/orientation change on mobile
+            let resizeTimeout;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    if (currentLevelData) {
+                        loadLevelData(currentLevelData);
+                    }
+                }, 150);
+            });
         })();
     </script>
 </body>
