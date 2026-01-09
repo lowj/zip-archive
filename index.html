@@ -198,6 +198,8 @@
             border-radius: 8px;
             position: relative;
             margin: 0 auto;
+            touch-action: none;
+            -webkit-touch-callout: none;
         }
 
         @media (max-width: 480px) {
@@ -217,7 +219,9 @@
             justify-content: center;
             position: relative;
             cursor: pointer;
-            transition: background-color 0.15s ease;
+            transition: background-color 0.1s ease;
+            will-change: transform;
+            transform: translateZ(0);
         }
 
         /* --- SNAKE STYLING --- */
@@ -248,6 +252,8 @@
             background: linear-gradient(135deg, var(--path-start), var(--path-end));
             z-index: 4;
             pointer-events: none;
+            will-change: transform;
+            transform: translateZ(0);
         }
 
         .connector.horizontal {
@@ -873,6 +879,8 @@
             
             initGrid(h, w);
             path = [];
+            prevPathLength = 0;
+            lastProcessedCell = null;
             
             maxNumber = Math.max(...puzzleData.numbers.map(p => p.n));
             
@@ -974,19 +982,81 @@
             document.addEventListener('touchend', handleEnd);
         }
 
-        function getCellFromEvent(e) {
-            let target = e.touches ? document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY) : e.target;
-            while (target && !target.classList.contains('cell')) {
-                target = target.parentElement;
+        // Cache for cell bounds (populated on grid init)
+        let cellBoundsCache = [];
+        let lastProcessedCell = null;
+
+        function updateCellBoundsCache() {
+            cellBoundsCache = [];
+            for (let r = 0; r < currentRows; r++) {
+                cellBoundsCache[r] = [];
+                for (let c = 0; c < currentCols; c++) {
+                    const rect = grid[r][c].element.getBoundingClientRect();
+                    cellBoundsCache[r][c] = {
+                        left: rect.left,
+                        right: rect.right,
+                        top: rect.top,
+                        bottom: rect.bottom
+                    };
+                }
             }
-            if (!target || !target.dataset.row) return null;
-            const r = parseInt(target.dataset.row);
-            const c = parseInt(target.dataset.col);
-            return {r, c, cell: grid[r][c]};
+        }
+
+        function getCellFromPoint(clientX, clientY) {
+            // Fast path: check if still in the same cell as last time
+            if (lastProcessedCell) {
+                const bounds = cellBoundsCache[lastProcessedCell.r]?.[lastProcessedCell.c];
+                if (bounds && 
+                    clientX >= bounds.left && clientX <= bounds.right &&
+                    clientY >= bounds.top && clientY <= bounds.bottom) {
+                    return lastProcessedCell;
+                }
+            }
+            
+            // Check adjacent cells first (most likely during drawing)
+            if (lastProcessedCell) {
+                const {r, c} = lastProcessedCell;
+                const adjacents = [
+                    {r: r-1, c}, {r: r+1, c}, {r, c: c-1}, {r, c: c+1}
+                ];
+                for (const adj of adjacents) {
+                    if (adj.r >= 0 && adj.r < currentRows && adj.c >= 0 && adj.c < currentCols) {
+                        const bounds = cellBoundsCache[adj.r][adj.c];
+                        if (clientX >= bounds.left && clientX <= bounds.right &&
+                            clientY >= bounds.top && clientY <= bounds.bottom) {
+                            lastProcessedCell = {r: adj.r, c: adj.c, cell: grid[adj.r][adj.c]};
+                            return lastProcessedCell;
+                        }
+                    }
+                }
+            }
+            
+            // Full search as fallback
+            for (let r = 0; r < currentRows; r++) {
+                for (let c = 0; c < currentCols; c++) {
+                    const bounds = cellBoundsCache[r][c];
+                    if (clientX >= bounds.left && clientX <= bounds.right &&
+                        clientY >= bounds.top && clientY <= bounds.bottom) {
+                        lastProcessedCell = {r, c, cell: grid[r][c]};
+                        return lastProcessedCell;
+                    }
+                }
+            }
+            return null;
+        }
+
+        function getCellFromEvent(e) {
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return getCellFromPoint(clientX, clientY);
         }
 
         function handleStart(e) {
             e.preventDefault();
+            // Update cell bounds cache on interaction start (handles scroll/resize)
+            updateCellBoundsCache();
+            lastProcessedCell = null;
+            
             const data = getCellFromEvent(e);
             if (!data) return;
             const {r, c, cell} = data;
@@ -1088,34 +1158,77 @@
             return map[dir];
         }
 
+        // Track previous path length for incremental updates
+        let prevPathLength = 0;
+
         function updateGridDisplay() {
-            for (let r = 0; r < currentRows; r++) {
-                for (let c = 0; c < currentCols; c++) {
+            const currentLength = path.length;
+            
+            // If path got shorter (backtracking), clean up removed cells
+            if (currentLength < prevPathLength) {
+                // Full refresh on backtrack for simplicity and correctness
+                for (let r = 0; r < currentRows; r++) {
+                    for (let c = 0; c < currentCols; c++) {
+                        const cell = grid[r][c];
+                        cell.element.classList.remove('filled', 'path', 'current');
+                        cell.element.querySelectorAll('.connector').forEach(el => el.remove());
+                        if (cell.numberEl) cell.numberEl.classList.remove('active', 'completed');
+                    }
+                }
+                // Redraw entire path
+                for (let i = 0; i < path.length; i++) {
+                    const {r, c} = path[i];
                     const cell = grid[r][c];
-                    cell.element.classList.remove('filled', 'path', 'current');
-                    cell.element.querySelectorAll('.connector').forEach(el => el.remove());
-                    if (cell.numberEl) cell.numberEl.classList.remove('active', 'completed');
+                    
+                    if (i === path.length - 1) {
+                        cell.element.classList.add('current');
+                        if (cell.numberEl) cell.numberEl.classList.add('active');
+                    } else {
+                        cell.element.classList.add('path');
+                        if (cell.numberEl) cell.numberEl.classList.add('completed');
+                    }
+                    
+                    if (i > 0) {
+                        const prev = path[i - 1];
+                        const dir = getDirection(prev, path[i]);
+                        addConnector(prev.r, prev.c, dir);
+                        addConnector(r, c, opposite(dir));
+                    }
                 }
-            }
-            for (let i = 0; i < path.length; i++) {
-                const {r, c} = path[i];
+            } else if (currentLength > prevPathLength) {
+                // Path extended - only update the new cell and previous head
+                if (currentLength >= 2) {
+                    // Update previous head (was current, now path)
+                    const prevHead = path[currentLength - 2];
+                    const prevCell = grid[prevHead.r][prevHead.c];
+                    prevCell.element.classList.remove('current');
+                    prevCell.element.classList.add('path');
+                    if (prevCell.numberEl) {
+                        prevCell.numberEl.classList.remove('active');
+                        prevCell.numberEl.classList.add('completed');
+                    }
+                    
+                    // Add connector between prev head and new head
+                    const newHead = path[currentLength - 1];
+                    const dir = getDirection(prevHead, newHead);
+                    addConnector(prevHead.r, prevHead.c, dir);
+                    addConnector(newHead.r, newHead.c, opposite(dir));
+                }
+                
+                // Update new head
+                const head = path[currentLength - 1];
+                const headCell = grid[head.r][head.c];
+                headCell.element.classList.add('current');
+                if (headCell.numberEl) headCell.numberEl.classList.add('active');
+            } else if (currentLength === 1 && prevPathLength === 0) {
+                // First cell added
+                const {r, c} = path[0];
                 const cell = grid[r][c];
-                
-                if (i === path.length - 1) {
-                    cell.element.classList.add('current');
-                    if (cell.numberEl) cell.numberEl.classList.add('active');
-                } else {
-                    cell.element.classList.add('path');
-                    if (cell.numberEl) cell.numberEl.classList.add('completed');
-                }
-                
-                if (i > 0) {
-                    const prev = path[i - 1];
-                    const dir = getDirection(prev, path[i]);
-                    addConnector(prev.r, prev.c, dir);
-                    addConnector(r, c, opposite(dir));
-                }
+                cell.element.classList.add('current');
+                if (cell.numberEl) cell.numberEl.classList.add('active');
             }
+            
+            prevPathLength = currentLength;
             updateStatus();
         }
 
